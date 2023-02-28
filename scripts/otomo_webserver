@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+
+from flask import Flask, render_template
+import rospy
+
+import threading
+import sys
+
+app = Flask(__name__)
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+@app.route('/')
+def index():
+    return render_template("camera-view.html")
+
+if __name__ == '__main__':
+    threading.Thread(target=lambda: rospy.init_node('otomo_webserver', disable_signals=True)).start()
+    app.run(host="0.0.0.0", port=8080, debug=True, threaded=True)

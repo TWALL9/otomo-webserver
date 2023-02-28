@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>otomo-webserver</name>
+  <version>0.1.0</version>
+  <description>The otomo-webserver package</description>
+
+  <maintainer email="thomaswallis0@gmail.com">tom</maintainer>
+  <author email="thomaswallis0@gmail.com">tom</author>
+
+  <license>MIT</license>
+
+  <url type="website">https://github.com/TWALL9/otomo-webserver</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>roslaunch</build_depend>
+  <build_depend>otomo_msgs</build_depend>
+  <build_export_depend>rospy</build_export_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>rosbridge_server</exec_depend>
+  <exec_depend>python3-flask</exec_depend>
+
+
+  <!-- The export tag contains other, unspecified, tags -->
+  <export>
+    <!-- Other tools can request additional information be placed here -->
+
+  </export>
+</package>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>robot-control</title>
+    <script type='text/javascript' src="/static/eventemitter2.min.js"></script>
+    <script type='text/javascript' src="/static/roslib.min.js"></script>
+    <script type='text/javascript' src="/static/three.min.js"></script>
+    <script type='text/javascript' src="/static/nipplejs.js"></script>
+
+    <style>
+        html, body {
+            position: relative;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 0;
+            margin: 0;
+            /* background: rgba(0, 0, 0, 0.1); */
+        }
+
+        div.container {
+            position: relative;
+            top: 0;
+            left: 0;
+            width: 1280px;
+            height: 480px;
+            margin: 0;
+            /* background: rgba(0, 255, 255, 0.5); */
+        }
+
+        div.camera {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            margin: 0;
+            /* background: rgba(0, 0, 255, 0.5); */
+        }
+
+        #joystick {
+            position: absolute;
+            left: 750px;
+            bottom: 0;
+            height: 200px;
+            width: 200px;
+            /* background: rgba(255, 0, 0, 0.1); */
+        }
+    </style>
+
+    <script>
+        var ros = new ROSLIB.Ros();
+        ros.on('connection', function() {
+            console.log('Connected to ROS master!');
+        });
+        ros.on('error', function(error){
+            console.log('Error connecting to websocket server: ', error);
+            window.alert('Error connecting to websocket server');
+        });
+        ros.on('close', function() {
+            console.log('Connection to websocket server closed.');
+        });
+
+        ros.connect("ws://" + window.location.hostname + ":9090");
+
+        var joystickTopic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/manual/joystick',
+            messageType: 'otomo_msgs/Joystick'
+        })
+
+        var imageTopic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/camera/image/compressed',
+            messageType: 'sensor_msgs/CompressedImage'
+        });
+
+        imageTopic.subscribe(function(msg) {
+            //console.log('got image');
+            document.getElementById('image_pane').src = "data:image/jpeg;base64," + msg.data;
+        });
+    </script>
+</head>
+
+<body>
+    <h1>Camera View</h1>
+    <!-- increasing size of image without inflicting compression lag on the Pi -->
+    <div class="container">
+        <div class="camera">
+            <p><img id="image_pane" width="640" height="480"/></p>
+        </div>
+        <div id="joystick"></div>
+    </div>
+
+    <script>
+        var manager = nipplejs.create({
+            zone: document.getElementById('joystick'),
+            mode: 'static',
+            position: {left: '50%', top: '50%'},
+            color: 'red',
+            size: 200
+        });
+
+        manager.on('move', function(nipple, event) {
+            const radius = manager.options.size / 2.0;
+            const distance = (event.distance / radius) * 100.0;
+            const heading = event.angle.degree;
+            // console.log('event distance: ', event.distance);
+            // console.log('size: ', manager.options.size);
+            console.log('calc distance: ', distance);
+            console.log('heading: ', heading);
+
+
+            var msg = new ROSLIB.Message({
+                heading: heading,
+                speed: distance,
+            });
+
+            joystickTopic.publish(msg);
+        });
+
+        manager.on('end', function(nipple, event) {
+            console.log('release');
+            var msg = new ROSLIB.Message({
+                heading: 0,
+                speed: 0,
+            });
+
+            joystickTopic.publish(msg);
+        });
+
+    </script>
+</body>
+
+</html>
