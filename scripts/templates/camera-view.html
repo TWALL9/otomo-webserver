@@ -37,6 +37,7 @@
             width: 640px;
             height: 480px;
             margin: 0;
+            transform: rotate(180deg);
             /* background: rgba(0, 0, 255, 0.5); */
         }
 
@@ -85,7 +86,7 @@
 </head>
 
 <body>
-    <h1>Camera View</h1>
+    <h1>Dingus View</h1>
     <!-- increasing size of image without inflicting compression lag on the Pi -->
     <div class="container">
         <div class="camera">
@@ -106,7 +107,10 @@
         manager.on('move', function(nipple, event) {
             const radius = manager.options.size / 2.0;
             const distance = (event.distance / radius) * 100.0;
-            const heading = event.angle.degree;
+            var heading = (event.angle.degree - 90) % 360;
+            if (heading < 0) {
+                heading = heading + 360;
+            }
             // console.log('event distance: ', event.distance);
             // console.log('size: ', manager.options.size);
             console.log('calc distance: ', distance);
