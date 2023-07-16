@@ -187,6 +187,8 @@
             size: 200
         });
 
+        last_msg_time = Date.now();
+
         manager.on('move', function(nipple, event) {
             const radius = manager.options.size / 2.0;
             const distance = (event.distance / radius) * 100.0;
@@ -198,14 +200,16 @@
             // console.log('size: ', manager.options.size);
             console.log('calc distance: ', distance);
             console.log('heading: ', heading);
+            
+            if (Date.now() - last_msg_time > 100) {
+                var msg = new ROSLIB.Message({
+                    heading: heading,
+                    speed: distance,
+                });
 
-
-            var msg = new ROSLIB.Message({
-                heading: heading,
-                speed: distance,
-            });
-
-            joystickTopic.publish(msg);
+                joystickTopic.publish(msg);
+                last_msg_time = Date.now();
+            }
         });
 
         manager.on('end', function(nipple, event) {
