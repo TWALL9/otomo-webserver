@@ -1,237 +1,352 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <title>robot-control</title>
-    <script type='text/javascript' src="/static/eventemitter2.min.js"></script>
-    <script type='text/javascript' src="/static/roslib.min.js"></script>
-    <script type='text/javascript' src="/static/three.min.js"></script>
-    <script type='text/javascript' src="/static/nipplejs.js"></script>
+  <meta charset="utf-8">
+  <title>robot-control</title>
+  <script type='text/javascript' src="/static/eventemitter2.min.js"></script>
+  <script type='text/javascript' src="/static/roslib.min.js"></script>
+  <script type='text/javascript' src="/static/three.min.js"></script>
+  <script type='text/javascript' src="/static/nipplejs.js"></script>
 
-    <style>
-        html, body {
-            position: relative;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            padding: 0;
-            margin: 0;
-            /* background: rgba(0, 0, 0, 0.1); */
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #1e1e1e;
+    }
+
+    #top-container {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: row nowrap;
+      height: 480px;
+    }
+
+    #stream-container {
+      position: relative;
+      width: 640px;
+      height: 480px;
+      margin: 10px;
+      flex-grow: 0;
+      order: 1;
+    }
+
+    /* div.camera {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 640px;
+      height: 480px;
+      margin: 0; */
+      /* transform: rotate(180deg); */
+      /* background: rgba(0, 0, 255, 0.5); */
+    /* } */
+
+    #camera-stream {
+      width: 100%;
+      height: 100%;
+    }
+
+    #control-container  {
+      position: relative;
+      display: flex;
+      width: 200px;
+      height: inherit;
+      order: 2;
+      flex-grow: 1;
+      flex-shrink: 1;
+      flex-flow: column;
+    }
+
+    #switch-container {
+      display: flex;
+      width: inherit;
+      order: 1;
+      flex-grow: 1;
+      flex-shrink: 1;
+    }
+
+    #joystick-container {
+      display: flex;
+      width: 200px;
+      height: 200px;
+      order: 2;
+      flex-grow: 0;
+      flex-shrink: 0;
+    }
+
+    #joystick {
+      width: 100%;
+      height: 100%;
+    }
+
+    #fan_toggle {
+      position: relative;
+      left: 10%;
+      top: 50%;
+    }
+
+    /* The switch - the box around the slider */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+
+    /* Hide default HTML checkbox */
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    /* The slider */
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      -webkit-transition: .4s;
+      transition: .4s;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      -webkit-transition: .4s;
+      transition: .4s;
+    }
+
+    input:checked + .slider {
+      background-color: #2196F3;
+    }
+
+    input:focus + .slider {
+      box-shadow: 0 0 1px #2196F3;
+    }
+
+    input:checked + .slider:before {
+      -webkit-transform: translateX(26px);
+      -ms-transform: translateX(26px);
+      transform: translateX(26px);
+    }
+
+    /* Rounded sliders */
+    .slider.round {
+      border-radius: 34px;
+    }
+
+    .slider.round:before {
+      border-radius: 50%;
+    } 
+  </style>
+
+  <script>
+    var ros = new ROSLIB.Ros();
+    ros.on('connection', function() {
+      console.log('Connected to ROS master!');
+    });
+    ros.on('error', function(error){
+      console.log('Error connecting to websocket server: ', error);
+      window.alert('Error connecting to websocket server');
+    });
+    ros.on('close', function() {
+      console.log('Connection to websocket server closed.');
+    });
+
+    ros.connect("ws://" + window.location.hostname + ":9090");
+
+    var joystickTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/manual/joystick',
+      messageType: 'otomo_msgs/Joystick'
+    });
+
+    var fanTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/manual/fan_on',
+      messageType: 'std_msgs/Bool'
+    });
+
+    var imageTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/camera/image/compressed',
+      messageType: 'sensor_msgs/CompressedImage'
+    });
+
+    imageTopic.subscribe(function(msg) {
+      //console.log('got image');
+      document.getElementById('image_pane').src = "data:image/jpeg;base64," + msg.data;
+    });
+
+    var haveEvents = 'GamepadEvent' in window;
+    var haveWebkitEvents = 'WebKitGamepadEvent' in window;
+    var controllers = {};
+    var requestAnimationFrame = window.mozRequestAnimationFrame ||
+      window.webkitRequestAnimationFrame || 
+      window.requestAnimationFrame;
+
+    function connectHandler(e) {
+      controllers[e.gamepad.index] = e.gamepad;
+      console.log("Controller connected at index: %d", e.gamepad.index);
+      requestAnimationFrame(updateStatus);
+    }
+
+    function disconnectHandler(e) {
+      console.log("Controller disconnected at index: %d", e.gamepad.index);
+      delete controllers[e.gamepad.index];
+    }
+
+    function scanGamepads() {
+      var gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+      for (var i = 0; i < gamepads.length; i++) {
+        if (gamepads[i] && (gamepads[i].index in controllers)) {
+          controllers[gamepads[i].index] = gamepads[i];
         }
+      }
+    }
 
-        div.container {
-            position: relative;
-            top: 0;
-            left: 0;
-            width: 1280px;
-            height: 480px;
-            margin: 0;
-            /* background: rgba(0, 255, 255, 0.5); */
-        }
-
-        div.camera {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 640px;
-            height: 480px;
-            margin: 0;
-            /* transform: rotate(180deg); */
-            /* background: rgba(0, 0, 255, 0.5); */
-        }
-
-        #joystick {
-            position: absolute;
-            left: 750px;
-            bottom: 0;
-            height: 200px;
-            width: 200px;
-            /* background: rgba(255, 0, 0, 0.1); */
-        }
-
-        #fan_toggle {
-            position: absolute;
-            left: 750px;
-            bottom: 200px;
-        }
-
-        /* The switch - the box around the slider */
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 60px;
-            height: 34px;
-        }
-
-        /* Hide default HTML checkbox */
-        .switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        /* The slider */
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #ccc;
-            -webkit-transition: .4s;
-            transition: .4s;
-        }
-
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 26px;
-            width: 26px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            -webkit-transition: .4s;
-            transition: .4s;
-        }
-
-        input:checked + .slider {
-            background-color: #2196F3;
-        }
-
-        input:focus + .slider {
-            box-shadow: 0 0 1px #2196F3;
-        }
-
-        input:checked + .slider:before {
-            -webkit-transform: translateX(26px);
-            -ms-transform: translateX(26px);
-            transform: translateX(26px);
-        }
-
-        /* Rounded sliders */
-        .slider.round {
-            border-radius: 34px;
-        }
-
-        .slider.round:before {
-            border-radius: 50%;
-        } 
-    </style>
-
-    <script>
-        var ros = new ROSLIB.Ros();
-        ros.on('connection', function() {
-            console.log('Connected to ROS master!');
-        });
-        ros.on('error', function(error){
-            console.log('Error connecting to websocket server: ', error);
-            window.alert('Error connecting to websocket server');
-        });
-        ros.on('close', function() {
-            console.log('Connection to websocket server closed.');
-        });
-
-        ros.connect("ws://" + window.location.hostname + ":9090");
-
-        var joystickTopic = new ROSLIB.Topic({
-            ros: ros,
-            name: '/manual/joystick',
-            messageType: 'otomo_msgs/Joystick'
-        });
-
-        var fanTopic = new ROSLIB.Topic({
-            ros: ros,
-            name: '/manual/fan_on',
-            messageType: 'std_msgs/Bool'
-        });
-
-        var imageTopic = new ROSLIB.Topic({
-            ros: ros,
-            name: '/camera/image/compressed',
-            messageType: 'sensor_msgs/CompressedImage'
-        });
-
-        imageTopic.subscribe(function(msg) {
-            //console.log('got image');
-            document.getElementById('image_pane').src = "data:image/jpeg;base64," + msg.data;
-        });
-    </script>
+    if (haveEvents) {
+      window.addEventListener("gamepadconnected", connectHandler);
+      window.addEventListener("gamepaddisconnected", disconnectHandler);
+    } else if (haveWebkitEvents) {
+      window.addEventListener("webkitgamepadconnected", connectHandler);
+      window.addEventListener("webkitgamepaddisconnected", disconnectHandler);
+    } else {
+      setInterval(scanGamepads, 500);
+    }
+  </script>
 </head>
 
 <body>
-    <h1>Dingus View</h1>
-    <!-- increasing size of image without inflicting compression lag on the Pi -->
-    <div class="container">
-        <div class="camera">
-            <p><img id="image_pane" width="640" height="480"/></p>
-        </div>
+  <h1 style="color:white">Dingus View</h1>
+  <!-- increasing size of image without inflicting compression lag on the Pi -->
+  <div id="top-container">
+    <div id="stream-container">
+      <div id="camera-stream">
+        <p><img id="image_pane" width="640" height="480"/></p>
+      </div>
+    </div>
+    <div id="control-container">
+      <div id="joystick-container">
         <div id="joystick"></div>
+      </div>
+      <div id="switch-container">
         <!-- Rounded switch -->
         <div id="fan_toggle">
-            <h3>Fan Control</h3>
-            <label class="switch">
-                <input type="checkbox" id="fan_checkbox">
-                <span class="slider round"></span>
-            </label>
+          <h3 style="color:white">Fan Control</h3>
+          <label class="switch">
+            <input type="checkbox" id="fan_checkbox">
+            <span class="slider round"></span>
+          </label>
         </div>
+      </div>
     </div>
+  </div>
 
-    <script>
-        var manager = nipplejs.create({
-            zone: document.getElementById('joystick'),
-            mode: 'static',
-            position: {left: '50%', top: '50%'},
-            color: 'red',
-            size: 200
+  <script>
+    var manager = nipplejs.create({
+      zone: document.getElementById('joystick'),
+      mode: 'static',
+      position: {left: '50%', top: '50%'},
+      color: 'red',
+      size: 200
+    });
+
+    var joy_0 = document.getElementById('nipple_0_0');
+    joy_0.style.position = "relative";
+
+    last_msg_time = Date.now();
+
+    manager.on('move', function(nipple, event) {
+      const radius = manager.options.size / 2.0;
+      const distance = (event.distance / radius) * 100.0;
+      var heading = (event.angle.degree - 90) % 360;
+      if (heading < 0) {
+        heading = heading + 360;
+      }
+      // console.log('event distance: ', event.distance);
+      // console.log('size: ', manager.options.size);
+      console.log('calc distance: ', distance);
+      console.log('heading: ', heading);
+      
+      if (Date.now() - last_msg_time > 100) {
+        var msg = new ROSLIB.Message({
+          heading: heading,
+          speed: distance,
         });
 
+        joystickTopic.publish(msg);
         last_msg_time = Date.now();
+      }
+    });
 
-        manager.on('move', function(nipple, event) {
-            const radius = manager.options.size / 2.0;
-            const distance = (event.distance / radius) * 100.0;
-            var heading = (event.angle.degree - 90) % 360;
-            if (heading < 0) {
-                heading = heading + 360;
+    manager.on('end', function(nipple, event) {
+      console.log('release');
+      var msg = new ROSLIB.Message({
+        heading: 0,
+        speed: 0,
+      });
+
+      joystickTopic.publish(msg);
+    });
+
+    function updateStatus() {
+      scanGamepads();
+      for (j in controllers) {
+        var controller = controllers[j];
+        for (var i = 0; i < controller.buttons.length; i++) {
+          // var b = buttons[i];
+          var val = controller.buttons[i];
+          var pressed = val == 1.0;
+          var touched = false;
+          if (typeof(val) == "object") {
+            pressed = val.pressed;
+            if ("touched" in val) {
+              touched = val.touched;
             }
-            // console.log('event distance: ', event.distance);
-            // console.log('size: ', manager.options.size);
-            console.log('calc distance: ', distance);
-            console.log('heading: ', heading);
-            
-            if (Date.now() - last_msg_time > 100) {
-                var msg = new ROSLIB.Message({
-                    heading: heading,
-                    speed: distance,
-                });
+            val = val.value;
+          }
+          // console.log("button %d is pressed: %d, touched: %d, pct: %s", i, pressed, touched, pct);
+        }
 
-                joystickTopic.publish(msg);
-                last_msg_time = Date.now();
-            }
-        });
+        var xAxis = controller.axes[0];
+        var yAxis = controller.axes[1];
+        console.log("x: %f, y: %f", xAxis, yAxis);
+        const distance = Math.hypot(xAxis, yAxis) * 100.0;
+        var heading = Math.acos(xAxis/distance) - (Math.PI / 2);
+        console.log("heading: %O, distance: %O", heading, distance);
+        // for (var i = 0; i < controller.axes.length; i++) {
+          // var a = axes[i];
+          // a.innerHTML = i + ": " + controller.axes[i].toFixed(4);
+          // console.log("axis %d is %f", i, controller.axes[i]);
+        // }
 
-        manager.on('end', function(nipple, event) {
-            console.log('release');
-            var msg = new ROSLIB.Message({
-                heading: 0,
-                speed: 0,
-            });
+        // console.log("controller state: %O", controller);
+      }
+      requestAnimationFrame(updateStatus);
+    }
 
-            joystickTopic.publish(msg);
-        });
+    const fanCheckbox = document.getElementById('fan_checkbox');
 
-        const fanCheckbox = document.getElementById('fan_checkbox');
+    fanCheckbox.addEventListener('change', (event) => {
+      var msg = new ROSLIB.Message({
+        data: event.currentTarget.checked,
+      });
+      fanTopic.publish(msg);
+    });
 
-        fanCheckbox.addEventListener('change', (event) => {
-            var msg = new ROSLIB.Message({
-                data: event.currentTarget.checked,
-            });
-            fanTopic.publish(msg);
-        });
-
-    </script>
+  </script>
 </body>
 
 </html>
