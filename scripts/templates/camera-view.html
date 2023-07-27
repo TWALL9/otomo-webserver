@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1">
   <title>robot-control</title>
   <script type='text/javascript' src="/static/eventemitter2.min.js"></script>
   <script type='text/javascript' src="/static/roslib.min.js"></script>
@@ -148,7 +149,7 @@
 
     .slider.round:before {
       border-radius: 50%;
-    } 
+    }
   </style>
 
   <script>
@@ -193,7 +194,7 @@
     var haveWebkitEvents = 'WebKitGamepadEvent' in window;
     var controllers = {};
     var requestAnimationFrame = window.mozRequestAnimationFrame ||
-      window.webkitRequestAnimationFrame || 
+      window.webkitRequestAnimationFrame ||
       window.requestAnimationFrame;
 
     function connectHandler(e) {
@@ -258,28 +259,23 @@
     var manager = nipplejs.create({
       zone: document.getElementById('joystick'),
       mode: 'static',
-      position: {left: '50%', top: '50%'},
+      position: {left: '100px', bottom: '15%'},
       color: 'red',
       size: 200
     });
 
-    var joy_0 = document.getElementById('nipple_0_0');
-    joy_0.style.position = "relative";
+    // var joy_0 = document.getElementById('nipple_0_0');
+    // joy_0.style.position = "relative";
 
     last_msg_time = Date.now();
+    prevButtonPressed = false;
 
-    manager.on('move', function(nipple, event) {
-      const radius = manager.options.size / 2.0;
-      const distance = (event.distance / radius) * 100.0;
-      var heading = (event.angle.degree - 90) % 360;
-      if (heading < 0) {
-        heading = heading + 360;
+    function sendJoystickMsg(distance, heading) {
+      // console.log('calc distance: ', distance);
+      // console.log('heading: ', heading);
+      if (distance == 0) {
+        heading = 0;
       }
-      // console.log('event distance: ', event.distance);
-      // console.log('size: ', manager.options.size);
-      console.log('calc distance: ', distance);
-      console.log('heading: ', heading);
-      
       if (Date.now() - last_msg_time > 100) {
         var msg = new ROSLIB.Message({
           heading: heading,
@@ -289,48 +285,52 @@
         joystickTopic.publish(msg);
         last_msg_time = Date.now();
       }
+    }
+
+    manager.on('move', function(nipple, event) {
+      const radius = manager.options.size / 2.0;
+      const distance = (event.distance / radius) * 100.0;
+      var heading = (event.angle.degree - 90) % 360;
+      if (heading < 0) {
+        heading = heading + 360;
+      }
+      sendJoystickMsg(distance, heading);
     });
 
     manager.on('end', function(nipple, event) {
       console.log('release');
-      var msg = new ROSLIB.Message({
-        heading: 0,
-        speed: 0,
-      });
-
-      joystickTopic.publish(msg);
+      sendJoystickMsg(0, 0);
     });
 
     function updateStatus() {
       scanGamepads();
       for (j in controllers) {
         var controller = controllers[j];
-        for (var i = 0; i < controller.buttons.length; i++) {
-          // var b = buttons[i];
-          var val = controller.buttons[i];
-          var pressed = val == 1.0;
-          var touched = false;
-          if (typeof(val) == "object") {
-            pressed = val.pressed;
-            if ("touched" in val) {
-              touched = val.touched;
-            }
-            val = val.value;
+        const buttonPressed = controller.buttons[0].value;
+        if (buttonPressed != prevButtonPressed) {
+          prevButtonPressed = buttonPressed;
+          console.log("button is changed: %d", buttonPressed);
+          if (buttonPressed) {
+            var fanCheckbox = document.getElementById('fan_checkbox');
+            fanCheckbox.click();
           }
-          // console.log("button %d is pressed: %d, touched: %d, pct: %s", i, pressed, touched, pct);
         }
 
-        var xAxis = controller.axes[0];
-        var yAxis = controller.axes[1];
-        console.log("x: %f, y: %f", xAxis, yAxis);
-        const distance = Math.hypot(xAxis, yAxis) * 100.0;
-        var heading = Math.acos(xAxis/distance) - (Math.PI / 2);
-        console.log("heading: %O, distance: %O", heading, distance);
-        // for (var i = 0; i < controller.axes.length; i++) {
-          // var a = axes[i];
-          // a.innerHTML = i + ": " + controller.axes[i].toFixed(4);
-          // console.log("axis %d is %f", i, controller.axes[i]);
-        // }
+        // Throw in a judicial deadzone
+        const xAxis = Math.abs(controller.axes[0]) >= 0.1 ? controller.axes[0] : 0;
+        const yAxis = Math.abs(controller.axes[1]) >= 0.1 ? controller.axes[1] * -1 : 0;  // on xbox controllers, this is reversed for some reason
+
+        // console.log("x: %f, y: %f", xAxis, yAxis);
+        var distance = Math.hypot(xAxis, yAxis) * 100.0;
+        var heading = Math.atan2(yAxis, xAxis);
+        heading = ((heading * 180 / Math.PI) - 90) % 360;
+        if (heading < 0) {
+          heading = heading + 360;
+        }
+        if (distance > 100.0) {
+          distance = 100;
+        }
+        sendJoystickMsg(distance, heading);
 
         // console.log("controller state: %O", controller);
       }
