@@ -17,6 +17,7 @@ catkin_package()
 install(
   PROGRAMS
     scripts/otomo_webserver
+    scripts/heartbeat
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 

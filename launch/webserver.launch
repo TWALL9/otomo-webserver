@@ -3,4 +3,5 @@
 <launch>
    <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" /> 
    <node name="otomo_webserver" pkg="otomo-webserver" type="otomo_webserver"></node> 
+   <node name="otomo_webserver_heartbeat" pkg="otomo-webserver" type="heartbeat"></node> 
 </launch>
