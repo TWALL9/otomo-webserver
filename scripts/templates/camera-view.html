@@ -304,10 +304,17 @@
 
     manager.on('move', function(nipple, event) {
       const radius = manager.options.size / 2.0;
-      const distance = (event.distance / radius) * 100.0;
+      var distance = (event.distance / radius) * 100.0;
       var heading = (event.angle.degree - 90) % 360;
       if (heading < 0) {
         heading = heading + 360;
+      }
+      if (distance > 100) {
+        distance = 100.0;
+      }
+      // Cut throttle so pivot in place isn't insane
+      if ((heading >= 225 && heading <= 315) || (heading >= 45 && heading <= 135)) {
+        distance *= 0.75;
       }
       sendJoystickMsg(distance, heading);
     });
