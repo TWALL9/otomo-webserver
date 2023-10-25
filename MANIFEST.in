@@ -1,0 +1,2 @@
+recursive-include otomo_webserver/templates *
+recursive-include otomo_webserver/static *
