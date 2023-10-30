@@ -169,8 +169,8 @@
 
     var joystickTopic = new ROSLIB.Topic({
       ros: ros,
-      name: '/manual/joystick',
-      messageType: 'otomo_msgs/Joystick'
+      name: 'diff_cont/cmd_vel_unstamped',
+      messageType: 'geometry_msgs/msg/Twist'
     });
 
     var fanTopic = new ROSLIB.Topic({
@@ -286,15 +286,18 @@
     prevButtonPressed = false;
 
     function sendJoystickMsg(distance, heading) {
-      // console.log('calc distance: ', distance);
-      // console.log('heading: ', heading);
-      if (distance == 0) {
-        heading = 0;
-      }
       if (Date.now() - last_msg_time > 100) {
         var msg = new ROSLIB.Message({
-          heading: heading,
-          speed: distance,
+          linear: {
+            x: distance,
+            y: 0,
+            z: 0
+          },
+          angular: {
+            x: 0,
+            y: 0,
+            z: heading,
+          }
         });
 
         joystickTopic.publish(msg);
@@ -304,19 +307,12 @@
 
     manager.on('move', function(nipple, event) {
       const radius = manager.options.size / 2.0;
-      var distance = (event.distance / radius) * 100.0;
-      var heading = (event.angle.degree - 90) % 360;
-      if (heading < 0) {
-        heading = heading + 360;
-      }
-      if (distance > 100) {
-        distance = 100.0;
-      }
-      // Cut throttle so pivot in place isn't insane
-      if ((heading >= 225 && heading <= 315) || (heading >= 45 && heading <= 135)) {
-        distance *= 0.75;
-      }
-      sendJoystickMsg(distance, heading);
+      var distance = event.distance / radius;
+      // In ros control, x is "forward" which is up on a joystick
+      // y is also negative when moving to the right
+      var x = distance * Math.sin(event.angle.radian);
+      var y = distance * Math.cos(event.angle.radian) * -1;
+      sendJoystickMsg(x, y);
     });
 
     manager.on('end', function(nipple, event) {
@@ -339,20 +335,14 @@
         }
 
         // Throw in a judicial deadzone
-        const xAxis = Math.abs(controller.axes[0]) >= 0.1 ? controller.axes[0] : 0;
-        const yAxis = Math.abs(controller.axes[1]) >= 0.1 ? controller.axes[1] * -1 : 0;  // on xbox controllers, this is reversed for some reason
+        // on xbox controllers, this is reversed for some reason
+        var yAxis = Math.abs(controller.axes[0]) >= 0.1 ? controller.axes[0] * -1 : 0;
+        var xAxis = Math.abs(controller.axes[1]) >= 0.1 ? controller.axes[1] * -1 : 0;
+        yAxis /= 2;
+        xAxis /= 2;
 
         // console.log("x: %f, y: %f", xAxis, yAxis);
-        var distance = Math.hypot(xAxis, yAxis) * 100.0;
-        var heading = Math.atan2(yAxis, xAxis);
-        heading = ((heading * 180 / Math.PI) - 90) % 360;
-        if (heading < 0) {
-          heading = heading + 360;
-        }
-        if (distance > 100.0) {
-          distance = 100;
-        }
-        sendJoystickMsg(distance, heading);
+        sendJoystickMsg(xAxis, yAxis);
 
         // console.log("controller state: %O", controller);
       }
